@@ -1,6 +1,5 @@
 # vettel
 
-![build](https://github.com/geohot/minikeyvalue/workflows/build/badge.svg)
 A simple key-value store written in sub-200 lines of C code. currently, you can perform the following commands.
 
 ```bash
