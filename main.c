@@ -251,6 +251,10 @@ char *merge(char **arr, int idx)
 bool delete_key(char *key)
 {
 	FILE *fp = fopen(get_store_path(), "r+");
+	if (fp == NULL)
+	{
+		return false;
+	}
 	fseek(fp, 0, SEEK_END);
 	int len = ftell(fp);
 	fseek(fp, 0, SEEK_SET);
@@ -269,6 +273,10 @@ bool delete_key(char *key)
 	}
 	fclose(fp);
 	FILE *writer = fopen(get_store_path(), "w");
+	if (writer == NULL)
+	{
+		return false;
+	}
 	fprintf(writer, "%s", contents);
 	fclose(writer);
 	return true;
@@ -312,7 +320,7 @@ void list_all_keys()
 	while ((getline(&line, &len, fp)) != -1)
 	{
 		char *line_key = strtok(line, ":");
-		printf("%d) \"%s\"\n", idx, line_key);
+		printf("%s%d)%s \"%s\"\n", GRAY, idx, RESET, line_key);
 		idx++;
 	}
 }
@@ -400,11 +408,14 @@ void parse_input(const char *line)
 		}
 		if (MATCH(get_key(arr[1], false), NO_KEY_FOUND_STR))
 		{
-			printf("a record with that name already exists\n");
-			printf("\"%s\" : \"%s\"\n", arr[1], get_key(arr[1], true));
+			ERR("no record with that key exists");
 			return;
 		}
 		bool ret = delete_key(arr[1]);
+		if (!ret)
+		{
+			ERR("unable to delete key for some unknown reason");
+		}
 	}
 	else if (MATCH(line, "info") || MATCH(line, "i"))
 	{
