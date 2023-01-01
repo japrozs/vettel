@@ -1,6 +1,6 @@
 # vettel
 
-A simple key-value store written in ~400 lines of C code. currently, you can perform the following commands.
+A simple key-value store written in ~500 lines of C code. currently, you can perform the following commands.
 ![demo](./assets/demo.gif)
 
 # building
