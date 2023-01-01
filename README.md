@@ -1,6 +1,6 @@
 # vettel
 
-A simple key-value store written in sub-200 lines of C code. currently, you can perform the following commands.
+A simple key-value store written in ~400 lines of C code. currently, you can perform the following commands.
 
 ```bash
 $ vt
