@@ -20,6 +20,12 @@
 #define MATCH(a, b) strncmp(a, b, strlen(b)) == 0
 #define ALLOC(n) malloc(sizeof(char) * BUF_SIZE * n)
 
+// for displaying errors
+#define RED_BOLD "\033[1;31m"
+#define BLUE_BOLD "\033[1;34m"
+#define GRAY "\033[0;37m"
+#define RESET "\033[0m"
+
 // server size
 #define BUFSIZE 4096
 #define PORT 7072
@@ -34,6 +40,11 @@
 #define VT_NO_UMASK0 010		/* Don't do a umask(0) */
 #define VT_MAX_CLOSE 8192		/* Max file descriptors to close if \
 								   sysconf(_SC_OPEN_MAX) is indeterminate */
+
+void error(char *msg)
+{
+	printf("%serror%s: %s%s\n", RED_BOLD, GRAY, msg, RESET);
+}
 
 void register_daemon()
 {
@@ -54,7 +65,7 @@ void register_daemon()
 	if (pid < 0)
 	{
 		// TODO: couldn't create daemon
-		printf("here 3\n");
+		error("unable to create daemon due to some unknown error");
 		exit(EXIT_FAILURE);
 	}
 
@@ -122,6 +133,7 @@ void start_server()
 				"{\n"
 				"\t\"command\" : \"whatup\",\n"
 				"\t\"output\" : \"hi there\"\n"
+				"\t\"error\" : \"\"\n"
 				"}",
 				SERVER_NAME);
 		write(client_socket, res, strlen(res));
@@ -198,7 +210,7 @@ char *get_store_path()
 		if (w == NULL)
 		{
 			// TODO: provide a better error message
-			printf("couldn't initialize store at \"%s\"\n", path);
+			error("unable to create key-value store at $HOME/.store.vt");
 			exit(0);
 		}
 		fclose(w);
@@ -254,8 +266,10 @@ char *get_key(char *key, bool show_error)
 	fclose(fp);
 	if (show_error)
 	{
+		char *str = malloc(sizeof(char) * 512);
+		sprintf(str, "%serror%s: no record with the key \"%s\" was found%s", RED_BOLD, GRAY, key, RESET);
 		// TODO: throw error that no key was found
-		return "no key was found!";
+		return str;
 	}
 	else
 	{
@@ -283,6 +297,7 @@ bool set_key(char *key, char *value)
 	if (fp == NULL)
 	{
 		// TODO: show errors
+		error("unable to access store at $HOME/.store.vt");
 		return false;
 	}
 	fprintf(fp, "%s:%s\n", key, value);
@@ -308,13 +323,13 @@ void parse_input(const char *line)
 		if (arr[1] == NULL)
 		{
 			// TODO: show error, no key present
-			printf("can't access key\n");
+			error("unable to read the key");
 			return;
 		}
 		else if (arr[2] == NULL)
 		{
 			// TODO: show error, no value present
-			printf("can't access value\n");
+			error("unable to read the value");
 			return;
 		}
 		if (!(MATCH(get_key(arr[1], false), NO_KEY_FOUND_STR)))
@@ -338,7 +353,8 @@ void parse_input(const char *line)
 		if (arr[1] == NULL)
 		{
 			// TODO: show error, no key present
-			printf("can't access key\n");
+			error("unable to read the key");
+			return;
 		}
 		printf("%s\n", get_key(arr[1], true));
 	}
@@ -349,7 +365,7 @@ void parse_input(const char *line)
 	else
 	{
 		// TODO: show error, no command matched
-		printf("no command matched!\n");
+		error("no command with that name exists");
 	}
 }
 
