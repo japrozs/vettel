@@ -8,10 +8,16 @@ $ vt
 0) "this_is_the_key"
 1) "key"
 >>> get key
+value
+>>> get this_is_the_key
 this is the value
->>> set  new_value
-a record with that name already exists
-"key" : "this is the value"
+>>> set key new_value
+error: a record with key "key" already exists
+>>> del key
+>>> list
+0) "this_is_the_key"
+>>> set key new_value
+>>> q
 ```
 
 # building

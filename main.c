@@ -25,6 +25,10 @@
 #define BLUE_BOLD "\033[1;34m"
 #define GRAY "\033[0;37m"
 #define RESET "\033[0m"
+#define ERR(...)                           \
+	printf("%serror%s: ", RED_BOLD, GRAY); \
+	printf(__VA_ARGS__);                   \
+	printf("%s\n", RESET);
 
 // server size
 #define BUFSIZE 4096
@@ -40,11 +44,6 @@
 #define VT_NO_UMASK0 010		/* Don't do a umask(0) */
 #define VT_MAX_CLOSE 8192		/* Max file descriptors to close if \
 								   sysconf(_SC_OPEN_MAX) is indeterminate */
-
-void error(char *msg)
-{
-	printf("%serror%s: %s%s\n", RED_BOLD, GRAY, msg, RESET);
-}
 
 void register_daemon()
 {
@@ -65,7 +64,7 @@ void register_daemon()
 	if (pid < 0)
 	{
 		// TODO: couldn't create daemon
-		error("unable to create daemon due to some unknown error");
+		ERR("unable to create daemon due to some unknown error");
 		exit(EXIT_FAILURE);
 	}
 
@@ -81,6 +80,7 @@ int check(int exp, const char *msg)
 {
 	if (exp == SOCKETERROR)
 	{
+		// TODO: output this error to the log file
 		perror(msg);
 		exit(1);
 	}
@@ -210,7 +210,7 @@ char *get_store_path()
 		if (w == NULL)
 		{
 			// TODO: provide a better error message
-			error("unable to create key-value store at $HOME/.store.vt");
+			ERR("unable to create key-value store at $HOME/.store.vt");
 			exit(0);
 		}
 		fclose(w);
@@ -246,6 +246,32 @@ char *merge(char **arr, int idx)
 		sprintf(str, "%s %s", str, arr[i]);
 	}
 	return str;
+}
+
+bool delete_key(char *key)
+{
+	FILE *fp = fopen(get_store_path(), "r+");
+	fseek(fp, 0, SEEK_END);
+	int len = ftell(fp);
+	fseek(fp, 0, SEEK_SET);
+	char *contents = malloc(sizeof(char) * (len + 1));
+	size_t line_len = 0;
+	char *line = NULL;
+	while ((getline(&line, &line_len, fp)) != -1)
+	{
+		char *line_cpy = malloc(sizeof(char) * line_len);
+		strcpy(line_cpy, line);
+		char *line_key = strtok(line, ":");
+		if (!(MATCH(line_key, key)))
+		{
+			sprintf(contents, "%s%s", contents, line_cpy);
+		}
+	}
+	fclose(fp);
+	FILE *writer = fopen(get_store_path(), "w");
+	fprintf(writer, "%s", contents);
+	fclose(writer);
+	return true;
 }
 
 char *get_key(char *key, bool show_error)
@@ -297,7 +323,7 @@ bool set_key(char *key, char *value)
 	if (fp == NULL)
 	{
 		// TODO: show errors
-		error("unable to access store at $HOME/.store.vt");
+		ERR("unable to access store at $HOME/.store.vt");
 		return false;
 	}
 	fprintf(fp, "%s:%s\n", key, value);
@@ -305,13 +331,14 @@ bool set_key(char *key, char *value)
 	return true;
 }
 
+// parse the commands e.g. 'set <key> <value>'
 void parse_input(const char *line)
 {
 	if (MATCH(line, "quit") || MATCH(line, "q"))
 	{
 		exit(EXIT_SUCCESS);
 	}
-	else if (MATCH(line, "help"))
+	else if (MATCH(line, "help") || MATCH(line, "h"))
 	{
 		// TODO: fix this
 		printf("this is the help message\n");
@@ -323,19 +350,18 @@ void parse_input(const char *line)
 		if (arr[1] == NULL)
 		{
 			// TODO: show error, no key present
-			error("unable to read the key");
+			ERR("unable to read the key");
 			return;
 		}
 		else if (arr[2] == NULL)
 		{
 			// TODO: show error, no value present
-			error("unable to read the value");
+			ERR("unable to read the value");
 			return;
 		}
 		if (!(MATCH(get_key(arr[1], false), NO_KEY_FOUND_STR)))
 		{
-			printf("a record with that name already exists\n");
-			printf("\"%s\" : \"%s\"\n", arr[1], get_key(arr[1], true));
+			ERR("a record with key \"%s\" already exists", arr[1]);
 			return;
 		}
 		bool ret = set_key(arr[1], merge(arr, 2));
@@ -353,7 +379,7 @@ void parse_input(const char *line)
 		if (arr[1] == NULL)
 		{
 			// TODO: show error, no key present
-			error("unable to read the key");
+			ERR("unable to read the key");
 			return;
 		}
 		printf("%s\n", get_key(arr[1], true));
@@ -362,15 +388,40 @@ void parse_input(const char *line)
 	{
 		list_all_keys();
 	}
+	else if (MATCH(line, "delete") || MATCH(line, "del"))
+	{
+		char **arr = ALLOC(3);
+		break_up(arr, line);
+		if (arr[1] == NULL)
+		{
+			// TODO: show error, no key present
+			ERR("unable to read the key");
+			return;
+		}
+		if (MATCH(get_key(arr[1], false), NO_KEY_FOUND_STR))
+		{
+			printf("a record with that name already exists\n");
+			printf("\"%s\" : \"%s\"\n", arr[1], get_key(arr[1], true));
+			return;
+		}
+		bool ret = delete_key(arr[1]);
+	}
+	else if (MATCH(line, "info") || MATCH(line, "i"))
+	{
+		// TODO: fix this
+		printf("this is the info message\n");
+	}
 	else
 	{
 		// TODO: show error, no command matched
-		error("no command with that name exists");
+		ERR("no command with that name exists");
 	}
 }
 
 int main(void)
 {
+	// create the daemon that operates the server
+	// to access the store
 	int pid = fork();
 	if (pid >= 0 && pid == 0)
 	{
@@ -387,11 +438,15 @@ int main(void)
 
 		return EXIT_SUCCESS;
 	}
+
+	// start the REPL (read, eval, print , loop)
 	while (true)
 	{
 		const char *line = readline(">>> ");
 		if (!line)
 			break; // exited
+		if (strcmp(line, "") == 0)
+			continue;
 		add_history(line);
 		parse_input(line);
 	}
