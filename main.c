@@ -131,7 +131,6 @@ char *get_key(char *key, bool show_error)
 		if (CMP(line_key, key))
 		{
 			// found key
-			printf("hi there!\n");
 			fclose(fp);
 			return strtok(NULL, "\n");
 		}
@@ -225,6 +224,7 @@ void parse_input(const char *line)
 			printf("an error occured!\n");
 			return;
 		}
+		printf("ok\n");
 	}
 	else if (MATCH(line, "get"))
 	{
