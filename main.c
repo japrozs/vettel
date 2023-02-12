@@ -10,7 +10,9 @@
 #define BUF_SIZE 2048
 #define NO_KEY_FOUND_STR "vettel:key_not_found"
 #define DAEMON_NAME "vetteld"
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define MATCH(a, b) strncmp(a, b, strlen(b)) == 0
+#define CMP(a, b) strncmp(a, b, MAX(strlen(a), strlen(b))) == 0
 #define ALLOC(n) malloc(sizeof(char) * BUF_SIZE * n)
 
 // for displaying errors
@@ -126,9 +128,10 @@ char *get_key(char *key, bool show_error)
 	while ((getline(&line, &len, fp)) != -1)
 	{
 		char *line_key = strtok(line, ":");
-		if (MATCH(line_key, key))
+		if (CMP(line_key, key))
 		{
 			// found key
+			printf("hi there!\n");
 			fclose(fp);
 			return strtok(NULL, "\n");
 		}
