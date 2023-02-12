@@ -1,18 +1,11 @@
 #include <editline/readline.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <syslog.h>
 #include <stdbool.h>
 #include <stdlib.h>
-
-// for the server
-#include <arpa/inet.h>
-#include <sys/socket.h>
-
-// for the daemon
-#include <sys/stat.h>
-#include <fcntl.h>
 
 #define BUF_SIZE 2048
 #define NO_KEY_FOUND_STR "vettel:key_not_found"
@@ -29,174 +22,17 @@
 	printf("%serror%s: ", RED_BOLD, GRAY); \
 	printf(__VA_ARGS__);                   \
 	printf("%s\n", RESET);
+bool FORMAT = 1;
 
-// server size
-#define BUFSIZE 4096
-#define PORT 7072
-#define SOCKETERROR (-1)
-#define SERVER_BACKLOG 100
-#define SERVER_NAME "vetteld@0x6a6170726f7a/0.0.1"
-
-// daemon flags
-#define VT_NO_CHDIR 01			/* Don't chdir ("/") */
-#define VT_NO_CLOSE_FILES 02	/* Don't close all open files */
-#define VT_NO_REOPEN_STD_FDS 04 /* Don't reopen stdin, stdout, and stderr to /dev/null */
-#define VT_NO_UMASK0 010		/* Don't do a umask(0) */
-#define VT_MAX_CLOSE 8192		/* Max file descriptors to close if \
-								   sysconf(_SC_OPEN_MAX) is indeterminate */
-
-void register_daemon()
+// fmt("hello, %s", "universe") -> "hello, universe"
+char *fmt(const char *fmt, ...)
 {
-	pid_t pid;
-	pid = fork();
-
-	/* An error occurred */
-	if (pid < 0)
-	{
-		printf("here 1\n");
-		exit(EXIT_FAILURE);
-	}
-
-	signal(SIGCHLD, SIG_IGN);
-	signal(SIGHUP, SIG_IGN);
-
-	pid = fork();
-	if (pid < 0)
-	{
-		// TODO: couldn't create daemon
-		ERR("unable to create daemon due to some unknown error");
-		exit(EXIT_FAILURE);
-	}
-
-	/* Close all open file descriptors */
-	int x;
-	for (x = sysconf(_SC_OPEN_MAX); x >= 0; x--)
-	{
-		close(x);
-	}
-}
-
-int check(int exp, const char *msg)
-{
-	if (exp == SOCKETERROR)
-	{
-		// TODO: output this error to the log file
-		perror(msg);
-		exit(1);
-	}
-
-	return exp;
-}
-
-void start_server()
-{
-	int server_socket, client_socket, addr_size;
-	struct sockaddr_in server_addr, client_addr;
-
-	check((server_socket = socket(AF_INET, SOCK_STREAM, 0)),
-		  "Failed to create socket");
-
-	server_addr.sin_family = AF_INET;
-	server_addr.sin_addr.s_addr = INADDR_ANY;
-	server_addr.sin_port = htons(PORT);
-
-	check(bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)),
-		  "Bind failed!");
-
-	check(listen(server_socket, SERVER_BACKLOG),
-		  "Listen failed!");
-
-	while (true)
-	{
-		printf("waiting for connections .... \n");
-		// wait, and eventually accept an incoming connection
-		check(client_socket = (accept(server_socket, (struct sockaddr *)&client_addr, (socklen_t *)&addr_size)),
-			  "accept failed!");
-
-		char buf[5000];
-		recv(client_socket, buf, 5000, 0);
-
-		char *route = strtok(buf, " ");
-		route = strtok(NULL, " ");
-		if (route[strlen(route) - 1] == '/' && strlen(route) != 1)
-		{
-			route[strlen(route) - 1] = '\0';
-		}
-
-		printf("route accessed :: %s\n", route);
-		char res[1 << 17];
-		sprintf(res,
-				"HTTP/1.1 200 OK\n"
-				"Server: %s\n"
-				"Content-Type: application/json\n"
-				"\n"
-				"{\n"
-				"\t\"command\" : \"whatup\",\n"
-				"\t\"output\" : \"hi there\"\n"
-				"\t\"error\" : \"\"\n"
-				"}",
-				SERVER_NAME);
-		write(client_socket, res, strlen(res));
-		close(client_socket);
-	}
-}
-
-int start_daemon(int flags)
-{
-	int maxfd, fd;
-
-	switch (fork()) // become background process
-	{
-	case -1:
-		return -1;
-	case 0:
-		break; // child falls through
-	default:
-		_exit(EXIT_SUCCESS); // parent terminates
-	}
-
-	if (setsid() == -1) // become leader of new session
-		return -1;
-
-	switch (fork())
-	{
-	case -1:
-		return -1;
-	case 0:
-		break; // child breaks out of case
-	default:
-		_exit(EXIT_SUCCESS); // parent process will exit
-	}
-
-	if (!(flags & VT_NO_UMASK0))
-		umask(0); // clear file creation mode mask
-
-	if (!(flags & VT_NO_CHDIR))
-		chdir("/"); // change to root directory
-
-	if (!(flags & VT_NO_CLOSE_FILES)) // close all open files
-	{
-		maxfd = sysconf(_SC_OPEN_MAX);
-		if (maxfd == -1)
-			maxfd = VT_MAX_CLOSE; // if we don't know then guess
-		for (fd = 0; fd < maxfd; fd++)
-			close(fd);
-	}
-
-	if (!(flags & VT_NO_REOPEN_STD_FDS))
-	{
-		close(STDIN_FILENO);
-
-		fd = open("/dev/null", O_RDWR);
-		if (fd != STDIN_FILENO)
-			return -1;
-		if (dup2(STDIN_FILENO, STDOUT_FILENO) != STDOUT_FILENO)
-			return -2;
-		if (dup2(STDIN_FILENO, STDERR_FILENO) != STDERR_FILENO)
-			return -3;
-	}
-
-	return 0;
+	va_list args;
+	va_start(args, fmt);
+	char *result;
+	vasprintf(&result, fmt, args);
+	va_end(args);
+	return result;
 }
 
 char *get_store_path()
@@ -320,7 +156,14 @@ void list_all_keys()
 	while ((getline(&line, &len, fp)) != -1)
 	{
 		char *line_key = strtok(line, ":");
-		printf("%s%d)%s \"%s\"\n", GRAY, idx, RESET, line_key);
+		if (FORMAT == 1)
+		{
+			printf("%s%d)%s \"%s\"\n", GRAY, idx, RESET, line_key);
+		}
+		else
+		{
+			printf("%s\n", line_key);
+		}
 		idx++;
 	}
 }
@@ -415,7 +258,9 @@ void parse_input(const char *line)
 		if (!ret)
 		{
 			ERR("unable to delete key for some unknown reason");
+			return;
 		}
+		printf("ok\n");
 	}
 	else if (MATCH(line, "info") || MATCH(line, "i"))
 	{
@@ -429,24 +274,17 @@ void parse_input(const char *line)
 	}
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
-	// create the daemon that operates the server
-	// to access the store
-	int pid = fork();
-	if (pid >= 0 && pid == 0)
+	if (argc >= 2 && strcmp(argv[1], "-c") == 0)
 	{
-		printf("in the child process");
-		int ret = start_daemon(pid);
-		if (ret)
+		if (argc == 2)
 		{
-			syslog(LOG_USER | LOG_ERR, "error starting the daemon");
-			closelog();
-			return EXIT_FAILURE;
+			ERR("unable to read command to run");
+			return EXIT_SUCCESS;
 		}
-
-		start_server();
-
+		FORMAT = 0;
+		parse_input(argv[2]);
 		return EXIT_SUCCESS;
 	}
 
